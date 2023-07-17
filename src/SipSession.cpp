@@ -177,9 +177,9 @@ void SipSession::onRecv(const toolkit::Buffer::Ptr &buf) {
                     osip_ist_execute(sThis->m_sipCtx.get());
                     osip_nict_execute(sThis->m_sipCtx.get());
                     osip_nist_execute(sThis->m_sipCtx.get());
-                    return true;
+                    return 1;
                 }
-                return false;
+                return 0;
             });
         }
     }

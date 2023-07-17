@@ -1,6 +1,7 @@
 #include <iostream>
 #include "SipSession.h"
 #include <Network/UdpServer.h>
+#include <csignal>
 
 using namespace toolkit;
 int main() {
