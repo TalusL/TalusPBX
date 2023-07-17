@@ -11,7 +11,7 @@
 #include "Network/Session.h"
 
 class SipSession :public toolkit::Session{
-public:
+protected:
     SipSession(const toolkit::Socket::Ptr &sock);
     ~SipSession() = default;
     void onRecv(const toolkit::Buffer::Ptr &buf) override;
