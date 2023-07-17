@@ -94,5 +94,5 @@ include_directories(3rd/libosip2-5.3.1/include)
 include_directories(3rd/ZLMediaKit/src)
 include_directories(3rd/ZLMediaKit/3rdpart/ZLToolKit/src)
 
-add_executable(TalusPBX src/main.cpp src/SipSession.cpp src/SipSession.h)
+add_executable(TalusPBX src/main.cpp src/SipSession.cpp src/SipSession.h src/AgentMgr.cpp src/AgentMgr.h)
 target_link_libraries(TalusPBX sip zltoolkit zlmediakit)
