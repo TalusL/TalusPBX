@@ -327,7 +327,9 @@ int SipSession::Response(osip_transaction_t *t, int status, const mediakit::StrC
 bool SipSession::CheckAuth(osip_transaction_t *t,const std::string& pass) {
     osip_authorization_t * authenticationInfo{};
     osip_message_get_authorization(t->orig_request,0,&authenticationInfo);
-    if (!authenticationInfo) {
+
+
+    auto responseUnAuth = [&](){
         StrCaseMap header;
         header["WWW-Authenticate"] =
                 StrPrinter << "Digest realm=\"" << "TalusPBX" << "\","
@@ -335,6 +337,10 @@ bool SipSession::CheckAuth(osip_transaction_t *t,const std::string& pass) {
                            << "nonce=\"" << toolkit::makeRandStr(32) << "\","
                            << "opaque=\"" << getIdentifier() << "\"";
         Response(t, 401, header);
+    };
+
+    if (!authenticationInfo) {
+        responseUnAuth();
         return false;
     }
     std::string username = authenticationInfo->username;
@@ -355,13 +361,16 @@ bool SipSession::CheckAuth(osip_transaction_t *t,const std::string& pass) {
     replace(nonce_count,"\"","");
     std::string qop = authenticationInfo->message_qop;
     replace(nonce_count,"\"","");
-
-//    H(H(username:realm:password):nonce:cnonce:H(requestMothod:request-URI))
+    osip_authorization_free(authenticationInfo);
 
     auto r = toolkit::MD5(
             toolkit::MD5(username+":"+realm+":"+pass).hexdigest()
             +":"+(qop.empty()?(nonce):(nonce+":"+nonce_count+":"+cnonce+":"+qop))+":"+
             toolkit::MD5(method+":"+uri).hexdigest()
     ).hexdigest();
-    return response==r;
+    auto result = (response == r);
+    if(!result){
+        responseUnAuth();
+    }
+    return result;
 }
