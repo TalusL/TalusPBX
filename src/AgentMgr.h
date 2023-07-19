@@ -7,7 +7,16 @@
 
 
 class AgentMgr {
-
+public:
+    static AgentMgr& Instance(){
+        static AgentMgr agentMgr;
+        return agentMgr;
+    }
+    void Start();
+    void Stop();
+private:
+    AgentMgr() = default;
+    ~AgentMgr() = default;
 };
 
 

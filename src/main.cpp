@@ -2,6 +2,7 @@
 #include "SipSession.h"
 #include <Network/UdpServer.h>
 #include <csignal>
+#include "AgentMgr.h"
 
 using namespace toolkit;
 int main() {
@@ -10,6 +11,8 @@ int main() {
 
     UdpServer::Ptr sipServer = std::make_shared<UdpServer>();
     sipServer->start<SipSession>(5060);
+
+    AgentMgr::Instance().Start();
 
     //设置退出信号处理函数
     static semaphore sem;

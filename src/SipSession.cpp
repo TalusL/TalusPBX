@@ -4,19 +4,12 @@
 
 #include "SipSession.h"
 #include "Util/NoticeCenter.h"
+#include "Util/MD5.h"
 
 static std::mutex g_instanceMapMtx;
 static std::map<void* ,std::weak_ptr<SipSession>> g_instanceMap;
 
-static std::shared_ptr<SipSession> getInstance(void * p){
-    std::lock_guard<std::mutex> lck(g_instanceMapMtx);
-    if(g_instanceMap.find(p) != g_instanceMap.end()){
-        return g_instanceMap[p].lock();
-    }
-    return {};
-}
-
-int SipSession::buildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, int status, osip_message_t *request) {
+int SipSession::BuildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, int status, osip_message_t *request) {
     osip_generic_param_t *tag;
     osip_message_t *response;
     int i;
@@ -213,47 +206,44 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
     m_sipCtx = std::shared_ptr<osip>(getSipCtx(),[](osip * ctx){
         osip_free(ctx);
     });
-    auto defaultCb = [](ON_SIP_MSG_EVT_ARGS){
+    auto defaultCb = [](int type, osip_transaction_t * t, osip_message_t * message){
         char *buf{};
         size_t len{};
         osip_message_to_str(message,&buf,&len);
         DebugL<<"recv:\n"<< buf;
         osip_free(buf);
 
-
-//        auto p = getInstance(osip_transaction_get_your_instance(t));
-//        if(!p){
-//            return ;
-//        }
-//        osip_message_t * resp;
-//        p->buildDefaultResp(&resp, nullptr,SIP_OK,message);
-//
-//        auto evt = osip_new_outgoing_sipmessage(resp);
-//        evt->transactionid = t->transactionid;
-//
-//        osip_transaction_add_event(t, evt);
-
+        auto p = SipSession::GetSipInstance(osip_transaction_get_your_instance(t));
+        if(!p) {
+            return ;
+        }
         //broadcast received sip message
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_MSG_EVT,type,t,message);
+        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_MSG_EVT,*p,type,t,message);
     };
-    auto transactionCb = [](ON_SIP_TRANSACTION_EVT_ARGS){
+    auto transactionCb = [](int type, osip_transaction_t * transaction){
         DebugL<<"transactionCb:"<<type;
-
+        auto p = SipSession::GetSipInstance(osip_transaction_get_your_instance(transaction));
+        if(!p) {
+            return ;
+        }
         //broadcast transaction callback
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSACTION_EVT,type,transaction);
+        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSACTION_EVT,*p,type,transaction);
     };
-    auto transportErrorCb = [](ON_SIP_TRANSPORT_ERROR_ARGS){
+    auto transportErrorCb = [](int type, osip_transaction_t * t, int error){
         DebugL<<"err:"<<type<<" code:"<<error;
-
+        auto p = SipSession::GetSipInstance(osip_transaction_get_your_instance(t));
+        if(!p) {
+            return ;
+        }
         //broadcast transport error
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSPORT_ERROR,type,t,error);
+        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSPORT_ERROR,*p,type,t,error);
     };
     // callback called when a SIP message must be sent.
     osip_set_cb_send_message(m_sipCtx.get(),[](osip_transaction_t * transaction, osip_message_t * message, char *, int,int){
         char *buf{};
         size_t len{};
         osip_message_to_str(message,&buf,&len);
-        auto p = getInstance(osip_transaction_get_your_instance(transaction));
+        auto p = GetSipInstance(osip_transaction_get_your_instance(transaction));
         if (p){
             DebugL<<"send:\n"<< buf;
             auto buffer = toolkit::BufferRaw::create();
@@ -301,4 +291,77 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
     osip_set_message_callback(m_sipCtx.get() , OSIP_NIST_SUBSCRIBE_RECEIVED, defaultCb);
     osip_set_message_callback(m_sipCtx.get() , OSIP_NIST_NOTIFY_RECEIVED, defaultCb);
     osip_set_message_callback(m_sipCtx.get() , OSIP_NIST_UNKNOWN_REQUEST_RECEIVED, defaultCb);
+}
+
+std::shared_ptr<SipSession> SipSession::GetSipInstance(void *p) {
+    std::lock_guard<std::mutex> lck(g_instanceMapMtx);
+    if(g_instanceMap.find(p) != g_instanceMap.end()){
+        return g_instanceMap[p].lock();
+    }
+    return {};
+}
+
+int SipSession::Response(osip_transaction_t *t, int status, const mediakit::StrCaseMap &header,
+                          const std::string &contentType, const std::string &body) {
+    osip_message_t *response;
+    auto ret = BuildDefaultResp(&response, nullptr,status,t->orig_request);
+    if(ret!=OSIP_SUCCESS){
+        return ret;
+    }
+    for (const auto &item: header){
+        osip_message_set_header(response, strdup(item.first.c_str()), strdup(item.second.c_str()));
+    }
+    if(!contentType.empty()&&!body.empty()){
+        osip_message_set_body_mime(response, strdup(contentType.c_str()),contentType.size());
+        osip_message_set_body(response, strdup(body.c_str()),body.size());
+    }
+
+    auto evt = osip_new_outgoing_sipmessage(response);
+    evt->transactionid = t->transactionid;
+
+    osip_transaction_add_event(t, evt);
+
+    return OSIP_SUCCESS;
+}
+
+bool SipSession::CheckAuth(osip_transaction_t *t,const std::string& pass) {
+    osip_authorization_t * authenticationInfo{};
+    osip_message_get_authorization(t->orig_request,0,&authenticationInfo);
+    if (!authenticationInfo) {
+        StrCaseMap header;
+        header["WWW-Authenticate"] =
+                StrPrinter << "Digest realm=\"" << "TalusPBX" << "\","
+                           << "qop=\"auth,auth-int\","
+                           << "nonce=\"" << toolkit::makeRandStr(32) << "\","
+                           << "opaque=\"" << getIdentifier() << "\"";
+        Response(t, 401, header);
+        return false;
+    }
+    std::string username = authenticationInfo->username;
+    replace(username,"\"","");
+    std::string realm = authenticationInfo->realm;
+    replace(realm,"\"","");
+    std::string method = t->orig_request->sip_method;
+    replace(method,"\"","");
+    std::string uri= authenticationInfo->uri;
+    replace(uri,"\"","");
+    std::string nonce = authenticationInfo->nonce;
+    replace(nonce,"\"","");
+    std::string cnonce = authenticationInfo->cnonce;
+    replace(cnonce,"\"","");
+    std::string response = authenticationInfo->response;
+    replace(response,"\"","");
+    std::string nonce_count = authenticationInfo->nonce_count;
+    replace(nonce_count,"\"","");
+    std::string qop = authenticationInfo->message_qop;
+    replace(nonce_count,"\"","");
+
+//    H(H(username:realm:password):nonce:cnonce:H(requestMothod:request-URI))
+
+    auto r = toolkit::MD5(
+            toolkit::MD5(username+":"+realm+":"+pass).hexdigest()
+            +":"+(qop.empty()?(nonce):(nonce+":"+nonce_count+":"+cnonce+":"+qop))+":"+
+            toolkit::MD5(method+":"+uri).hexdigest()
+    ).hexdigest();
+    return response==r;
 }
