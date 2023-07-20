@@ -217,8 +217,7 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
         if(!p) {
             return ;
         }
-        //broadcast received sip message
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_MSG_EVT,*p,type,t,message);
+        p->onSipMsgEvent(type,t,message);
     };
     auto transactionCb = [](int type, osip_transaction_t * transaction){
         DebugL<<"transactionCb:"<<type;
@@ -226,8 +225,7 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
         if(!p) {
             return ;
         }
-        //broadcast transaction callback
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSACTION_EVT,*p,type,transaction);
+        p->onSipTransactionEvent(type,transaction);
     };
     auto transportErrorCb = [](int type, osip_transaction_t * t, int error){
         DebugL<<"err:"<<type<<" code:"<<error;
@@ -235,8 +233,7 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
         if(!p) {
             return ;
         }
-        //broadcast transport error
-        toolkit::NoticeCenter::Instance().emitEvent(ON_SIP_TRANSPORT_ERROR,*p,type,t,error);
+        p->onSipTransportError(type,t,error);
     };
     // callback called when a SIP message must be sent.
     osip_set_cb_send_message(m_sipCtx.get(),[](osip_transaction_t * transaction, osip_message_t * message, char *, int,int){
@@ -324,53 +321,3 @@ int SipSession::Response(osip_transaction_t *t, int status, const mediakit::StrC
     return OSIP_SUCCESS;
 }
 
-bool SipSession::CheckAuth(osip_transaction_t *t,const std::string& pass) {
-    osip_authorization_t * authenticationInfo{};
-    osip_message_get_authorization(t->orig_request,0,&authenticationInfo);
-
-
-    auto responseUnAuth = [&](){
-        StrCaseMap header;
-        header["WWW-Authenticate"] =
-                StrPrinter << "Digest realm=\"" << "TalusPBX" << "\","
-                           << "qop=\"auth,auth-int\","
-                           << "nonce=\"" << toolkit::makeRandStr(32) << "\","
-                           << "opaque=\"" << getIdentifier() << "\"";
-        Response(t, 401, header);
-    };
-
-    if (!authenticationInfo) {
-        responseUnAuth();
-        return false;
-    }
-    std::string username = authenticationInfo->username;
-    replace(username,"\"","");
-    std::string realm = authenticationInfo->realm;
-    replace(realm,"\"","");
-    std::string method = t->orig_request->sip_method;
-    replace(method,"\"","");
-    std::string uri= authenticationInfo->uri;
-    replace(uri,"\"","");
-    std::string nonce = authenticationInfo->nonce;
-    replace(nonce,"\"","");
-    std::string cnonce = authenticationInfo->cnonce;
-    replace(cnonce,"\"","");
-    std::string response = authenticationInfo->response;
-    replace(response,"\"","");
-    std::string nonce_count = authenticationInfo->nonce_count;
-    replace(nonce_count,"\"","");
-    std::string qop = authenticationInfo->message_qop;
-    replace(nonce_count,"\"","");
-    osip_authorization_free(authenticationInfo);
-
-    auto r = toolkit::MD5(
-            toolkit::MD5(username+":"+realm+":"+pass).hexdigest()
-            +":"+(qop.empty()?(nonce):(nonce+":"+nonce_count+":"+cnonce+":"+qop))+":"+
-            toolkit::MD5(method+":"+uri).hexdigest()
-    ).hexdigest();
-    auto result = (response == r);
-    if(!result){
-        responseUnAuth();
-    }
-    return result;
-}

@@ -1,5 +1,5 @@
 #include <iostream>
-#include "SipSession.h"
+#include "UserAgentSession.h"
 #include <Network/UdpServer.h>
 #include <csignal>
 #include "AgentMgr.h"
@@ -10,7 +10,7 @@ int main() {
     Logger::Instance().add(std::make_shared<ConsoleChannel>("ConsoleChannel", LTrace));
 
     UdpServer::Ptr sipServer = std::make_shared<UdpServer>();
-    sipServer->start<SipSession>(5060);
+    sipServer->start<UserAgentSession>(5060);
 
     AgentMgr::Instance().Start();
 
