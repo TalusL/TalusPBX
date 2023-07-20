@@ -31,7 +31,7 @@ public:
     ~SipSession() override = default;
     static std::shared_ptr<SipSession> GetSipInstance(void * p);
     static int BuildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, int status, osip_message_t *request);
-    int Response(osip_transaction_t * t,int status,const mediakit::StrCaseMap& header = {},
+    static int Response(osip_transaction_t * t,int status,const mediakit::StrCaseMap& header = {},
                  const std::string& contentType = "",const std::string& body = "");
 protected:
     void onRecv(const toolkit::Buffer::Ptr &buf) override;
