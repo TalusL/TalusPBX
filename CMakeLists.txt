@@ -102,5 +102,5 @@ add_executable(TalusPBX
         src/AgentMgr.h
         src/UserAgentSession.cpp
         src/UserAgentSession.h
-        )
+        src/MessageRouter.cpp src/MessageRouter.h)
 target_link_libraries(TalusPBX sip zltoolkit zlmediakit)

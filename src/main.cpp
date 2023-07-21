@@ -10,7 +10,7 @@ int main() {
     Logger::Instance().add(std::make_shared<ConsoleChannel>("ConsoleChannel", LTrace));
 
     UdpServer::Ptr sipServer = std::make_shared<UdpServer>();
-    sipServer->start<UserAgentSession>(5060);
+    sipServer->start<UserAgentSession>(5061);
 
     AgentMgr::Instance().Start();
 

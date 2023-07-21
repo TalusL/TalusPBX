@@ -4,12 +4,15 @@
 
 #include "UserAgentSession.h"
 #include "Util/MD5.h"
+#include "AgentMgr.h"
 
 #define PASS "12345678"
 
 void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_message_t *message) {
     switch (type) {
         case OSIP_NIST_REGISTER_RECEIVED:{
+            auto userName = message->from->url->username;
+
             //收到注册消息
             if(!CheckAuth(t,PASS)){
                 StrCaseMap header;
@@ -19,21 +22,13 @@ void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_messa
                                    << "nonce=\"" << toolkit::makeRandStr(32) << "\","
                                    << "opaque=\"" << getIdentifier() << "\"";
                 Response(t, 401, header);
+                return;
             }
             //注册成功
             Response(t,200);
-            break;
-        }
-        case OSIP_IST_INVITE_RECEIVED:{
-            //收到INVITE
-            break;
-        }
-        case OSIP_IST_ACK_RECEIVED:{
-            //收到INVITE ACK
-            break;
-        }
-        case OSIP_ICT_STATUS_2XX_RECEIVED:{
-            //收到INVITE 200
+            AgentMgr::Instance().AddRegisterAgent(userName, dynamic_pointer_cast<UserAgentSession>(shared_from_this()));
+            InfoL<<"userId:"<<userName<<" register ok! peer:"<<toolkit::SocketHelper::get_peer_ip()
+                <<":"<<toolkit::SocketHelper::get_peer_port();
             break;
         }
         default:{

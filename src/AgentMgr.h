@@ -4,8 +4,9 @@
 
 #ifndef TALUSPBX_AGENTMGR_H
 #define TALUSPBX_AGENTMGR_H
+#include "UserAgentSession.h"
 
-
+using namespace std;
 class AgentMgr {
 public:
     static AgentMgr& Instance(){
@@ -14,7 +15,26 @@ public:
     }
     void Start();
     void Stop();
+    /**
+     * 增加注册成功的Agent
+     * @param userId 用户Id
+     * @param session 会话引用
+     */
+    void AddRegisterAgent(const string& userId,const shared_ptr<UserAgentSession>& session){
+        lock_guard<mutex> lck(m_agentSessionMtx);
+        if(m_regSessions.find(userId) != m_regSessions.end()){
+            auto agent = m_regSessions[userId].lock();
+            if(agent){
+                agent->shutdown(SockException(Err_shutdown,(StrPrinter<<"userId:"<<userId
+                    <<" connection change from:"<<agent->get_peer_ip()<<":"<<agent->get_peer_port()
+                    <<" to:"<<session->get_peer_ip()<<":"<<session->get_peer_port())));
+            }
+        }
+        m_regSessions[userId] = session;
+    }
 private:
+    mutex m_agentSessionMtx;
+    map<string,weak_ptr<UserAgentSession>> m_regSessions;
     AgentMgr() = default;
     ~AgentMgr() = default;
 };
