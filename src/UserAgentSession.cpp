@@ -11,8 +11,9 @@
 void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_message_t *message) {
     switch (type) {
         case OSIP_NIST_REGISTER_RECEIVED:{
-            auto userName = message->from->url->username;
-
+            //reset timer
+            m_ticker.resetTime();
+            m_userName = message->from->url->username;
             //收到注册消息
             if(!CheckAuth(t,PASS)){
                 StrCaseMap header;
@@ -26,8 +27,8 @@ void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_messa
             }
             //注册成功
             Response(t,200);
-            AgentMgr::Instance().AddRegisterAgent(userName, dynamic_pointer_cast<UserAgentSession>(shared_from_this()));
-            InfoL<<"userId:"<<userName<<" register ok! peer:"<<toolkit::SocketHelper::get_peer_ip()
+            AgentMgr::Instance().AddRegisterAgent(m_userName, dynamic_pointer_cast<UserAgentSession>(shared_from_this()));
+            InfoL<<"userId:"<<m_userName<<" register ok! peer:"<<toolkit::SocketHelper::get_peer_ip()
                 <<":"<<toolkit::SocketHelper::get_peer_port();
             break;
         }
@@ -76,4 +77,13 @@ bool UserAgentSession::CheckAuth(osip_transaction_t *t, const std::string &pass)
             toolkit::MD5(method + ":" + uri).hexdigest()
     ).hexdigest();
     return (response == r);
+}
+
+void UserAgentSession::onManager() {
+    if(m_ticker.elapsedTime() > 3*1000){
+        //TODO SEND OPTIONS
+    }
+    if(m_ticker.elapsedTime() > 6*1000){
+        shutdown(SockException(Err_shutdown,"session timeout!"));
+    }
 }
