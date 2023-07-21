@@ -27,6 +27,7 @@ protected:
 private:
     Ticker m_ticker;
     std::string m_userName;
+    std::string m_agentContract;
 };
 
 

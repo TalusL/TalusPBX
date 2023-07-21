@@ -9,6 +9,412 @@
 static std::mutex g_instanceMapMtx;
 static std::map<void* ,std::weak_ptr<SipSession>> g_instanceMap;
 
+int request_add_via(osip_message_t *request) {
+    char tmp[200];
+    
+
+    if (request == nullptr)
+        return OSIP_BADPARAMETER;
+
+    if (request->call_id == nullptr)
+        return OSIP_SYNTAXERROR;
+
+
+    snprintf(tmp, 200, "SIP/2.0/%s 999.999.999.999:99999;rport;branch=z9hG4bK%u", "UDP", osip_build_random_number());
+    
+
+    osip_message_set_via(request, tmp);
+
+    return OSIP_SUCCESS;
+}
+
+int generating_request_out_of_dialog(osip_message_t **dest, const char *method, const char *to, const char *from, const char *proxy) {
+    /* Section 8.1:
+       A valid request contains at a minimum "To, From, Call-iD, Cseq,
+       Max-Forwards and Via
+     */
+    int i;
+    osip_message_t *request;
+    int doing_register;
+
+    *dest = nullptr;
+
+    if (!method || !*method)
+        return OSIP_BADPARAMETER;
+
+
+    i = osip_message_init(&request);
+
+    if (i != 0)
+        return i;
+
+    /* prepare the request-line */
+    osip_message_set_method(request, osip_strdup(method));
+    osip_message_set_version(request, osip_strdup("SIP/2.0"));
+    osip_message_set_status_code(request, 0);
+    osip_message_set_reason_phrase(request, nullptr);
+
+    doing_register = 0 == strcmp("REGISTER", method);
+
+    if (doing_register) {
+        i = osip_uri_init(&(request->req_uri));
+
+        if (i != 0) {
+            osip_message_free(request);
+            return i;
+        }
+
+        i = osip_uri_parse(request->req_uri, proxy);
+
+        if (i != 0) {
+            osip_message_free(request);
+            return i;
+        }
+
+        i = osip_message_set_to(request, from);
+
+        if (i != 0 || request->to == nullptr) {
+            if (i >= 0)
+                i = OSIP_SYNTAXERROR;
+
+            osip_message_free(request);
+            return i;
+        }
+
+        /* REMOVE ALL URL PARAMETERS from to->url headers and add them as headers */
+        if (request->to != nullptr && request->to->url != nullptr) {
+            osip_uri_t *url = request->to->url;
+
+            while (osip_list_size(&url->url_headers) > 0) {
+                osip_uri_header_t *u_header;
+
+                u_header = (osip_uri_param_t *) osip_list_get(&url->url_headers, 0);
+
+                if (u_header == nullptr)
+                    break;
+
+                if (osip_strcasecmp(u_header->gname, "from") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "to") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "call-id") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "cseq") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "via") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "contact") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "route") == 0) {
+                    osip_message_set_route(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "call-info") == 0) {
+                    osip_message_set_call_info(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept") == 0) {
+                    osip_message_set_accept(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept-encoding") == 0) {
+                    osip_message_set_accept_encoding(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept-language") == 0) {
+                    osip_message_set_accept_language(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "alert-info") == 0) {
+                    osip_message_set_alert_info(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "allow") == 0) {
+                    osip_message_set_allow(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "content-type") == 0) {
+                    osip_message_set_content_type(request, u_header->gvalue);
+
+                } else
+                    osip_message_set_header(request, u_header->gname, u_header->gvalue);
+
+                osip_list_remove(&url->url_headers, 0);
+                osip_uri_param_free(u_header);
+            }
+        }
+
+    } else {
+        /* in any cases except REGISTER: */
+        i = osip_message_set_to(request, to);
+
+        if (i != 0 || request->to == nullptr) {
+            if (i >= 0)
+                i = OSIP_SYNTAXERROR;
+
+            OSIP_TRACE(osip_trace(__FILE__, __LINE__, OSIP_ERROR, nullptr, "[eXosip] callee address does not seems to be a sipurl: [%s]\n", to));
+            osip_message_free(request);
+            return i;
+        }
+
+        /* REMOVE ALL URL PARAMETERS from to->url headers and add them as headers */
+        if (request->to != nullptr && request->to->url != nullptr) {
+            osip_uri_t *url = request->to->url;
+
+            while (osip_list_size(&url->url_headers) > 0) {
+                osip_uri_header_t *u_header;
+
+                u_header = (osip_uri_param_t *) osip_list_get(&url->url_headers, 0);
+
+                if (u_header == nullptr)
+                    break;
+
+                if (osip_strcasecmp(u_header->gname, "from") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "to") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "call-id") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "cseq") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "via") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "contact") == 0) {
+                } else if (osip_strcasecmp(u_header->gname, "route") == 0) {
+                    osip_message_set_route(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "call-info") == 0) {
+                    osip_message_set_call_info(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept") == 0) {
+                    osip_message_set_accept(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept-encoding") == 0) {
+                    osip_message_set_accept_encoding(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "accept-language") == 0) {
+                    osip_message_set_accept_language(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "alert-info") == 0) {
+                    osip_message_set_alert_info(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "allow") == 0) {
+                    osip_message_set_allow(request, u_header->gvalue);
+
+                } else if (osip_strcasecmp(u_header->gname, "content-type") == 0) {
+                    osip_message_set_content_type(request, u_header->gvalue);
+
+                } else
+                    osip_message_set_header(request, u_header->gname, u_header->gvalue);
+
+                osip_list_remove(&url->url_headers, 0);
+                osip_uri_param_free(u_header);
+            }
+        }
+
+        if (proxy != nullptr && proxy[0] != 0) { /* equal to a pre-existing route set */
+            /* if the pre-existing route set contains a "lr" (compliance
+               with bis-08) then the req_uri should contains the remote target
+               URI */
+            osip_uri_param_t *lr_param;
+            osip_route_t *o_proxy;
+
+            osip_route_init(&o_proxy);
+            i = osip_route_parse(o_proxy, proxy);
+
+            if (i != 0) {
+                osip_route_free(o_proxy);
+                osip_message_free(request);
+                return i;
+            }
+
+            osip_uri_uparam_get_byname(o_proxy->url, "lr", &lr_param);
+
+            if (lr_param != nullptr) { /* to is the remote target URI in this case! */
+                i = osip_uri_clone(request->to->url, &(request->req_uri));
+
+                if (i != 0) {
+                    osip_route_free(o_proxy);
+                    osip_message_free(request);
+                    return i;
+                }
+
+                /* "[request] MUST includes a Route header field containing
+                   the route set values in order." */
+                osip_list_add(&request->routes, o_proxy, 0);
+
+            } else
+                /* if the first URI of route set does not contain "lr", the req_uri
+                   is set to the first uri of route set */
+            {
+                request->req_uri = o_proxy->url;
+                o_proxy->url = nullptr;
+                osip_route_free(o_proxy);
+                /* add the route set */
+                /* "The UAC MUST add a route header field containing
+                   the remainder of the route set values in order.
+                   The UAC MUST then place the remote target URI into
+                   the route header field as the last value
+                 */
+                osip_message_set_route(request, to);
+            }
+
+        } else { /* No route set (outbound proxy) is used */
+
+            /* The UAC must put the remote target URI (to field) in the req_uri */
+            i = osip_uri_clone(request->to->url, &(request->req_uri));
+
+            if (i != 0) {
+                osip_message_free(request);
+                return i;
+            }
+        }
+    }
+
+    /* set To and From */
+    i = osip_message_set_from(request, from);
+
+    if (i != 0 || request->from == nullptr) {
+        if (i >= 0)
+            i = OSIP_SYNTAXERROR;
+
+        osip_message_free(request);
+        return i;
+    }
+
+    /* REMOVE ALL URL PARAMETERS from from->url headers and add them as headers */
+    if (doing_register && request->from != nullptr && request->from->url != nullptr) {
+        osip_uri_t *url = request->from->url;
+
+        while (osip_list_size(&url->url_headers) > 0) {
+            osip_uri_header_t *u_header;
+
+            u_header = (osip_uri_param_t *) osip_list_get(&url->url_headers, 0);
+
+            if (u_header == nullptr)
+                break;
+
+            osip_list_remove(&url->url_headers, 0);
+            osip_uri_param_free(u_header);
+        }
+    }
+
+    if (request->to != nullptr && request->to->url != nullptr) {
+        osip_list_iterator_t it;
+        osip_uri_param_t *u_param = (osip_uri_param_t *) osip_list_get_first(&request->to->url->url_params, &it);
+
+        while (u_param != nullptr) {
+            if (u_param->gvalue != nullptr && u_param->gname != nullptr && osip_strcasecmp(u_param->gname, "method") == 0) {
+                osip_list_iterator_remove(&it);
+                osip_uri_param_free(u_param);
+                break;
+            }
+
+            u_param = (osip_uri_param_t *) osip_list_get_next(&it);
+        }
+    }
+
+    if (request->from != nullptr && request->from->url != nullptr) {
+        osip_list_iterator_t it;
+        osip_uri_param_t *u_param = (osip_uri_param_t *) osip_list_get_first(&request->from->url->url_params, &it);
+
+        while (u_param != nullptr) {
+            if (u_param->gvalue != nullptr && u_param->gname != nullptr && osip_strcasecmp(u_param->gname, "method") == 0) {
+                osip_list_iterator_remove(&it);
+                osip_uri_param_free(u_param);
+                break;
+            }
+
+            u_param = (osip_uri_param_t *) osip_list_get_next(&it);
+        }
+    }
+
+    if (request->req_uri) {
+        osip_list_iterator_t it;
+        osip_uri_param_t *u_param = (osip_uri_param_t *) osip_list_get_first(&request->req_uri->url_params, &it);
+
+        while (u_param != nullptr) {
+            if (u_param->gvalue != nullptr && u_param->gname != nullptr && osip_strcasecmp(u_param->gname, "method") == 0) {
+                osip_list_iterator_remove(&it);
+                osip_uri_param_free(u_param);
+                break;
+            }
+
+            u_param = (osip_uri_param_t *) osip_list_get_next(&it);
+        }
+    }
+
+    /* add a tag */
+    osip_from_set_tag(request->from, strdup(toolkit::makeRandStr(32, true).c_str()));
+
+    /* set the cseq and call_id header */
+    {
+        osip_call_id_t *callid;
+        osip_cseq_t *cseq;
+        char *num;
+        char *cidrand;
+
+        /* call-id is always the same for REGISTRATIONS */
+        i = osip_call_id_init(&callid);
+
+        if (i != 0) {
+            osip_message_free(request);
+            return i;
+        }
+
+        cidrand = strdup(toolkit::makeRandStr(32, true).c_str());;
+        osip_call_id_set_number(callid, cidrand);
+
+        request->call_id = callid;
+
+        i = osip_cseq_init(&cseq);
+
+        if (i != 0) {
+            osip_message_free(request);
+            return i;
+        }
+
+        num = osip_strdup(doing_register ? "1" : "20");
+        osip_cseq_set_number(cseq, num);
+        osip_cseq_set_method(cseq, osip_strdup(method));
+        request->cseq = cseq;
+
+        if (cseq->method == nullptr || cseq->number == nullptr) {
+            osip_message_free(request);
+            return OSIP_NOMEM;
+        }
+    }
+
+    i = request_add_via(request);
+
+    if (i != 0) {
+        osip_message_free(request);
+        return i;
+    }
+
+    /* always add the Max-Forward header */
+    osip_message_set_max_forwards(request, "70"); /* a UA should start a request with 70 */
+
+    if (0 == strcmp("REGISTER", method)) {
+    } else if (0 == strcmp("INFO", method)) {
+    } else if (0 == strcmp("OPTIONS", method)) {
+        osip_message_set_accept(request, "application/sdp");
+    }
+
+    /*  else if ... */
+    *dest = request;
+    return OSIP_SUCCESS;
+}
+
+
+int SipSession::BuildRequest( osip_message_t **message, const char *method, const char *to,
+        const char *from, const char *route) {
+    int i;
+
+    *message = nullptr;
+
+    if (method != nullptr && *method == '\0')
+        return OSIP_BADPARAMETER;
+
+    if (to != nullptr && *to == '\0')
+        return OSIP_BADPARAMETER;
+
+    if (from != nullptr && *from == '\0')
+        return OSIP_BADPARAMETER;
+
+    if (route != nullptr && *route == '\0')
+        route = nullptr;
+
+    i = generating_request_out_of_dialog(message, method, to, from, route);
+
+    if (i != 0)
+        return i;
+
+    return OSIP_SUCCESS;
+}
+
 int SipSession::BuildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, int status, osip_message_t *request) {
     osip_generic_param_t *tag;
     osip_message_t *response;
@@ -152,7 +558,6 @@ int SipSession::BuildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, i
                 osip_list_add(&response->headers, cp, 0);
         }
     }
-    osip_message_set_user_agent(response, "UA");
 
     *dest = response;
     return OSIP_SUCCESS;
@@ -239,6 +644,7 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
     osip_set_cb_send_message(m_sipCtx.get(),[](osip_transaction_t * transaction, osip_message_t * message, char *, int,int){
         char *buf{};
         size_t len{};
+        osip_message_set_user_agent(message, "UA");
         osip_message_to_str(message,&buf,&len);
         auto p = GetSipInstance(osip_transaction_get_your_instance(transaction));
         if (p){

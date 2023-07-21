@@ -33,6 +33,7 @@ public:
     static int BuildDefaultResp(osip_message_t **dest, osip_dialog_t *dialog, int status, osip_message_t *request);
     static int Response(osip_transaction_t * t,int status,const mediakit::StrCaseMap& header = {},
                  const std::string& contentType = "",const std::string& body = "");
+    static int BuildRequest(osip_message_t **message, const char *method, const char *to, const char *from, const char *route);
 protected:
     void onRecv(const toolkit::Buffer::Ptr &buf) override;
 
@@ -45,7 +46,8 @@ protected:
     virtual void onSipTransactionEvent(int type, osip_transaction_t * transaction){};
 
     virtual void onSipTransportError(int type, osip_transaction_t * t, int error){};
-private:
+
+
     std::shared_ptr<osip> m_sipCtx;
 };
 

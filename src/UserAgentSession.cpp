@@ -80,10 +80,11 @@ bool UserAgentSession::CheckAuth(osip_transaction_t *t, const std::string &pass)
 }
 
 void UserAgentSession::onManager() {
-    if(m_ticker.elapsedTime() > 3*1000){
-        //TODO SEND OPTIONS
+    if(m_ticker.elapsedTime() > 10*1000){
+        osip_message_t * req;
+        BuildRequest(&req,"OPTIONS","to","from","route");
     }
-    if(m_ticker.elapsedTime() > 6*1000){
+    if(m_ticker.elapsedTime() > 60*1000){
         shutdown(SockException(Err_shutdown,"session timeout!"));
     }
 }
