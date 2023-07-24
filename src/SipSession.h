@@ -34,6 +34,7 @@ public:
     static int Response(osip_transaction_t * t,int status,const mediakit::StrCaseMap& header = {},
                  const std::string& contentType = "",const std::string& body = "");
     static int BuildRequest(osip_message_t **message, const char *method, const char *to, const char *from, const char *route);
+    int SendMsg(osip_message_t *);
 protected:
     void onRecv(const toolkit::Buffer::Ptr &buf) override;
 

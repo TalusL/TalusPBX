@@ -25,9 +25,14 @@ protected:
     void onManager() override;
 
 private:
-    Ticker m_ticker;
+    Ticker m_regTicker;
+    Ticker m_aliveCheckTicker;
     std::string m_userName;
     std::string m_agentContract;
+    bool m_requiredRegister = true;
+    bool m_isRegistered = false;
+    uint64_t m_expires = 0;
+    osip_contact_t m_contact;
 };
 
 

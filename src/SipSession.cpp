@@ -644,7 +644,7 @@ SipSession::SipSession(const toolkit::Socket::Ptr &sock) : Session(sock) {
     osip_set_cb_send_message(m_sipCtx.get(),[](osip_transaction_t * transaction, osip_message_t * message, char *, int,int){
         char *buf{};
         size_t len{};
-        osip_message_set_user_agent(message, "UA");
+//        osip_message_set_user_agent(message, "UA");
         osip_message_to_str(message,&buf,&len);
         auto p = GetSipInstance(osip_transaction_get_your_instance(transaction));
         if (p){
@@ -725,5 +725,12 @@ int SipSession::Response(osip_transaction_t *t, int status, const mediakit::StrC
     osip_transaction_add_event(t, evt);
 
     return OSIP_SUCCESS;
+}
+
+int SipSession::SendMsg(osip_message_t * req) {
+    auto event = osip_new_outgoing_sipmessage(req);
+    auto transaction = osip_create_transaction(m_sipCtx.get(),event);
+    osip_transaction_set_your_instance(transaction, this);
+    return osip_transaction_add_event(transaction,event);;
 }
 
