@@ -5,6 +5,7 @@
 #include "UserAgentSession.h"
 #include "Util/MD5.h"
 #include "AgentMgr.h"
+#include "MessageRouter.h"
 
 #define PASS "12345678"
 
@@ -27,7 +28,7 @@ void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_messa
         case OSIP_NIST_REGISTER_RECEIVED:{
             //reset timer
             m_regTicker.resetTime();
-            m_userName = message->from->url->username;
+            m_userId = message->from->url->username;
             m_isRegistered = true;
 
             osip_header_t *expires{};
@@ -46,13 +47,14 @@ void UserAgentSession::onSipMsgEvent(int type, osip_transaction_t *t, osip_messa
             osip_contact_parse(&m_contact, strdup(c.c_str()));
             //注册成功
             Response(t,200);
-            AgentMgr::Instance().AddRegisterAgent(m_userName, dynamic_pointer_cast<UserAgentSession>(shared_from_this()));
-            InfoL<<"userId:"<<m_userName<<" register ok! peer:"<<toolkit::SocketHelper::get_peer_ip()
-                <<":"<<toolkit::SocketHelper::get_peer_port();
+            AgentMgr::Instance().AddRegisterAgent(m_userId, dynamic_pointer_cast<UserAgentSession>(shared_from_this()));
+            InfoL << "userId:" << m_userId << " register ok! peer:" << toolkit::SocketHelper::get_peer_ip()
+                  << ":" << toolkit::SocketHelper::get_peer_port();
             break;
         }
         default:{
-            // 收到SIP消息
+            // 收到SIP消息,路由消息
+            MessageRouter::Instance().RouteMessage(t,message, dynamic_pointer_cast<SipSession>(shared_from_this()));
         }
     }
 }
@@ -99,15 +101,19 @@ bool UserAgentSession::CheckAuth(osip_transaction_t *t, const std::string &pass)
 }
 
 void UserAgentSession::onManager() {
-    if(m_aliveCheckTicker.elapsedTime() > 10 * 1000){
-        osip_message_t * req;
-        char * contact{};
-        osip_from_to_str(&m_contact,&contact);
-        BuildRequest(&req,"OPTIONS",contact,contact, nullptr);
+//    if(m_aliveCheckTicker.elapsedTime() > 60 * 1000){
+//        osip_message_t * req;
+//        char * contact{};
+//        osip_from_to_str(&m_contact,&contact);
+//        BuildRequest(&req,"OPTIONS",contact,contact, nullptr);
+//
+//        SendMsg(req);
+//    }
+//    if(m_aliveCheckTicker.elapsedTime() > 60 * 1000){
+//        shutdown(SockException(Err_shutdown,"session timeout!"));
+//    }
+}
 
-        SendMsg(req);
-    }
-    if(m_aliveCheckTicker.elapsedTime() > 60 * 1000){
-        shutdown(SockException(Err_shutdown,"session timeout!"));
-    }
+UserAgentSession::~UserAgentSession() {
+    AgentMgr::Instance().RemoveAgent(m_userId);
 }

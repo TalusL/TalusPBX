@@ -32,6 +32,30 @@ public:
         }
         m_regSessions[userId] = session;
     }
+    /**
+     * RemoveAgent
+     * @param userId userid
+     */
+    void RemoveAgent(const string& userId){
+        lock_guard<mutex> lck(m_agentSessionMtx);
+        m_regSessions.erase(userId);
+        InfoL<<userId<<" removed!";
+    }
+    /**
+     * 遍历
+     * @param cb callback
+     */
+    void EachAgentSession(const function<bool(const string& userId,const shared_ptr<UserAgentSession>&)>& cb){
+        lock_guard<mutex> lck(m_agentSessionMtx);
+        for (const auto &item: m_regSessions){
+            auto uid = item.first;
+            auto session = item.second.lock();
+            auto cont = true;
+            if(cont&&session){
+                cont = cb(uid,session);
+            }
+        }
+    }
 private:
     mutex m_agentSessionMtx;
     map<string,weak_ptr<UserAgentSession>> m_regSessions;
